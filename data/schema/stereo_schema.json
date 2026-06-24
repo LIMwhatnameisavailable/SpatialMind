@@ -1,0 +1,39 @@
+{
+  "shape": {
+    "n_obs": 13168,
+    "n_vars": 17172
+  },
+  "obs_columns": [
+    "orig.ident",
+    "nCount_RNA",
+    "nFeature_RNA",
+    "x",
+    "y",
+    "cell_name",
+    "chip",
+    "id",
+    "nCount_SCT",
+    "nFeature_SCT",
+    "image_x",
+    "image_y",
+    "z",
+    "germ_layer",
+    "celltype",
+    "predicted.id"
+  ],
+  "var_columns": [
+    "in_scaled_data",
+    "highly_variable"
+  ],
+  "obsm_keys": [
+    "X_image",
+    "X_sagittal",
+    "X_spatial"
+  ],
+  "uns_keys": [
+    "image",
+    "sagittal",
+    "spatial"
+  ],
+  "has_spatial": false
+}

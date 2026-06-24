@@ -1,0 +1,39 @@
+# SpatialMind — 空间转录组分析 Agent
+# Python 3.10+
+# 安装: pip install -r requirements.txt
+
+# ── 核心空间转录组分析 ──
+scanpy>=1.11.5
+anndata>=0.11.4
+squidpy>=1.6.5
+
+# ── LangGraph 工作流 ──
+langgraph>=0.2.0
+
+# ── LLM 客户端（Anthropic SDK → PPIO 中转） ──
+anthropic>=0.40.0
+python-dotenv>=1.0.0
+
+# ── 前端（Streamlit Cloud） ──
+streamlit>=1.32.0
+
+# ── 文档导出 ──
+python-docx>=1.1.0
+pypdf>=4.0.0
+
+# ── 可视化 ──
+matplotlib>=3.8.0
+Pillow>=10.0.0
+
+# ── 数据科学 ──
+numpy>=1.24.0
+pandas>=1.5.0
+scipy>=1.10.0
+
+# ── 网络请求 ──
+requests>=2.31.0
+
+# ── 聚类（scanpy 可选依赖，显式指定确保可用） ──
+leidenalg>=0.10.0
+python-igraph>=0.11.0
+pynndescent>=0.5.0

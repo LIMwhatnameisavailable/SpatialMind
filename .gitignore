@@ -1,0 +1,41 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# 环境变量
+.env
+
+# 数据文件
+data/*.h5ad
+data/*.h5
+data/*.pkl
+data/*.tar
+data/*.tar.gz
+data/uploads/
+data/data/
+data/backup*/
+
+# 输出文件（所有分析结果）
+outputs/figures/*
+outputs/reports/*
+outputs/exports/*
+outputs/checkpoints.db
+!outputs/figures/archive/
+outputs/figures/archive/*
+
+# Streamlit Cloud secrets（但保留 config.toml）
+.streamlit/secrets.toml
+!.streamlit/config.toml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 下载脚本（包含 API 相关配置）
+data/download_backup.py

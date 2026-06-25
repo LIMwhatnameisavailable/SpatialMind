@@ -221,6 +221,32 @@ def get_step_display_name(step: str) -> str:
     return STEP_NAMES.get(step, step.upper())
 
 
+
+def _infer_step_from_filename(filename: str) -> str:
+    """从图片文件名推断步骤名"""
+    fname = filename.lower()
+    step_map = {
+        "qc": "qc",
+        "preprocess": "preprocess",
+        "pca": "dimred",
+        "umap": "dimred",
+        "dimred": "dimred",
+        "cluster": "cluster",
+        "leiden": "cluster",
+        "louvain": "cluster",
+        "spatial": "spatial",
+        "marker": "marker",
+        "deg": "marker",
+        "svg": "svg",
+        "data_load": "data_load",
+        "data_loader": "data_load",
+    }
+    for key, step in step_map.items():
+        if key in fname:
+            return step
+    return "other"
+
+
 def manage_session_figures(session_id: str, keep_n: int = 2) -> str:
     """
     管理 session 的图文件目录。

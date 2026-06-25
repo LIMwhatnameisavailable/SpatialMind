@@ -629,20 +629,12 @@ with tab1:
         # 保存用户输入
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # ★ 校验数据路径：排除 placeholder / 不存在的路径 / 非 h5ad
+        # ├─ 校验数据路径：不再拦截无数据请求，交给 intent_parser 路由
+        # │  QA 请求无数据也可进入，analysis 无数据由 intent_parser 返回 no_data
         valid_data_path = normalize_data_path(data_path)
 
-        if not valid_data_path:
-            st.error(
-                "⚠️ 未检测到有效的 .h5ad 数据文件。\n\n"
-                "请先在左侧侧边栏上传 `.h5ad` 文件，"
-                "或填写真实存在的 `.h5ad` 文件路径。"
-            )
-            st.info("上传数据后，你可以输入：`执行完整分析`、`只做QC和聚类` 等。")
-            st.stop()
-
-        # 自动加载数据（如果尚未加载）
-        if not st.session_state.data_loaded:
+        # 只有确实有有效数据时才设置 data_loaded
+        if valid_data_path and not st.session_state.data_loaded:
             st.session_state.data_loaded = True
             st.session_state.data_info = {
                 "n_obs": "—（分析后显示）",
@@ -876,24 +868,58 @@ with tab2:
             st.session_state.available_runs = _list_available_runs(session_id=st.session_state.session_id)
             st.rerun()
 
-        # 扫描当前选中目录
+                # ── 收集图表文件（三级 fallback） ──
+        # Level 1: 优先从 agent_state.step_results 获取 figure_paths
+        collected = []
+        _state = st.session_state.get("agent_state") or {}
+        _step_results = _state.get("step_results") or {}
+        if isinstance(_step_results, dict):
+            for _sn, _res in _step_results.items():
+                if isinstance(_res, dict):
+                    collected.extend(_res.get("figure_paths", []))
+        # 去重 + 过滤存在文件
+        _seen = set()
+        figure_files = []
+        for _p in collected:
+            if _p not in _seen and os.path.exists(_p):
+                _seen.add(_p)
+                figure_files.append(_p)
+
+        # Level 2: selected_run_path 子目录下的 png
+        if not figure_files and selected_run_path and os.path.exists(selected_run_path):
+            from pathlib import Path as _Path
+            figure_files = sorted(
+                _Path(selected_run_path).glob("*.png"),
+                key=lambda p: p.stat().st_mtime, reverse=True
+            )
+            figure_files = [str(p) for p in figure_files]
+
+        # Level 3: outputs/figures 根目录（最多 30 张最新）
+        if not figure_files:
+            _root = FIGURES_DIR
+            if _root.exists():
+                from pathlib import Path as _Path
+                figure_files = sorted(
+                    _root.glob("*.png"),
+                    key=lambda p: p.stat().st_mtime, reverse=True
+                )[:30]
+                figure_files = [str(p) for p in figure_files]
+
+        # 按步骤分组
+        _source_label = selected_run_path or "outputs/figures/"
         fig_groups: dict[str, list[dict]] = {}
-        for root, _dirs, files in os.walk(selected_run_path):
-            for fname in sorted(files):
-                if not fname.endswith(".png"):
-                    continue
-                fpath = os.path.join(root, fname)
-                mtime_dt = datetime.fromtimestamp(os.path.getmtime(fpath))
-                step = get_step_name_from_filename(fname)
-                fig_groups.setdefault(step, []).append({
-                    "path": fpath,
-                    "filename": fname,
-                    "mtime": mtime_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    "mtime_dt": mtime_dt,
-                })
+        for _fpath in figure_files:
+            _fname = os.path.basename(_fpath)
+            _mtime_dt = datetime.fromtimestamp(os.path.getmtime(_fpath))
+            _step = get_step_name_from_filename(_fname)
+            fig_groups.setdefault(_step, []).append({
+                "path": _fpath,
+                "filename": _fname,
+                "mtime": _mtime_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "mtime_dt": _mtime_dt,
+            })
 
-        st.caption(f"📁 {selected_run_path}  ·  {sum(len(v) for v in fig_groups.values())} 张图")
-
+        st.caption(f"📁 {_source_label} ·  {sum(len(v) for v in fig_groups.values())} 张图")
         # 按步骤分组展示
         step_order = ["qc", "preprocess", "dimred", "cluster", "spatial", "marker", "svg"]
 

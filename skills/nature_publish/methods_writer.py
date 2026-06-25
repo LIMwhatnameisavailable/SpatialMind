@@ -32,6 +32,9 @@ def write_methods(state: AgentState) -> str:
     # 收集分析细节
     methods_summary = []
     for step, result in step_results.items():
+        if not isinstance(result, dict):
+            methods_summary.append(f"{step}: (result not available)")
+            continue
         metrics = result.get("metrics", {})
         params = step_params.get(step, {})
         summary = result.get("summary", "")

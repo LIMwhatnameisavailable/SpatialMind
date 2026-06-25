@@ -66,7 +66,7 @@ def skill_invoker_node(state: AgentState) -> dict:
             "html_report": html_path,
             "disclaimer": "AI 生成内容，仅供参考。",
         }
-    except ImportError as e:
+    except Exception as e:
         skill_outputs["nature_publish"] = {
             "error": f"NaturePublishSkill 加载失败: {e}",
         }

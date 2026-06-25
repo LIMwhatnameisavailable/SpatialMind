@@ -1,55 +1,42 @@
-# Byte-compiled
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-
-# 环境变量
+# === Env & Secrets ===
 .env
-.env.local
+.env.*
+!.env.example
+server_ssh.env
+*.pem
+*.key
+*password*
+*secret*
+*token*
+*.streamlit/
 
-# 测试缓存
-.pytest_cache/
+# === Python ===
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
 
-# Office 临时文件
-~$*.docx
+# === Data ===
+data/*
+!data/schema/
+*.h5ad
+*.h5
+*.loom
+*.h5seurat
 
-# 数据文件
-data/*.h5ad
-data/*.h5
-data/*.pkl
-data/*.tar
-data/*.tar.gz
-data/uploads/
-data/data/
-data/backup*/
+# === Outputs & Logs ===
+outputs/
+logs/
 
-# 输出文件（所有分析结果）
-outputs/figures/*
-outputs/reports/*
-outputs/exports/*
-outputs/checkpoints.db
-!outputs/figures/archive/
-outputs/figures/archive/*
-
-# Streamlit Cloud secrets（但保留 config.toml）
-.streamlit/secrets.toml
-!.streamlit/config.toml
-
-# IDE
-.vscode/
-.idea/
-
-# OS
+# === OS ===
 .DS_Store
 Thumbs.db
 
-# 下载脚本（包含 API 相关配置）
-data/download_backup.py
+# === IDE ===
+.vscode/
+.idea/
 
-# 备份与缓存文件
-*.bak*
-*.diff
-
-# SSH 连接信息
-server_ssh.env
+# === Streamlit ===
+.streamlit/

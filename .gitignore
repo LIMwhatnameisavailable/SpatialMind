@@ -46,3 +46,10 @@ Thumbs.db
 
 # 下载脚本（包含 API 相关配置）
 data/download_backup.py
+
+# 备份与缓存文件
+*.bak*
+*.diff
+
+# SSH 连接信息
+server_ssh.env

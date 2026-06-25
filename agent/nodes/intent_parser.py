@@ -81,14 +81,13 @@ def intent_parser_node(state: AgentState) -> dict:
     path_patterns = re.findall(r"[\w/\\:.-]+\.h5ad", user_input)
     if path_patterns:
         data_path = os.path.abspath(path_patterns[0])
-    elif not data_path:
-        for root, dirs, files in os.walk("data"):
-            for f in files:
-                if f.endswith(".h5ad"):
-                    data_path = os.path.abspath(os.path.join(root, f))
-                    break
-            if data_path:
-                break
+    # 注意：不要自动扫描 data/ 目录找 h5ad 文件！
+    # 只有用户明确在侧边栏提供路径、上传文件、或在输入中写路径才算有数据。
+    # 自动扫描会导致"未上传数据"的 no_data 守卫失效。
+    elif data_path and not os.path.exists(data_path):
+        data_path = ""
+    if not data_path or not os.path.exists(data_path):
+        data_path = ""
 
     # 2. 如果没有可用 .h5ad 数据，禁止进入分析流程，避免 executor 报错
     if not data_path:

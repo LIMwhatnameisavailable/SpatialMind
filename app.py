@@ -352,6 +352,30 @@ if "selected_run" not in st.session_state:
     st.session_state.selected_run = None  # 当前选中的 run path
 
 
+# ── 数据路径校验 ────────────────────────────────────────────
+def normalize_data_path(raw_path: str) -> str:
+    """
+    校验用户提供的数据路径，只返回真实存在的 .h5ad 文件路径。
+    不存在的路径、placeholder 提示文字、非 .h5ad 后缀 → 返回 ""。
+    确保不上传数据时 no_data 守卫能正确触发。
+    """
+    raw_path = (raw_path or "").strip()
+    if not raw_path:
+        return ""
+    # 排除 UI placeholder 和默认提示文本
+    lower = raw_path.lower()
+    if "placeholder" in lower or "visium_hne_adata" in lower:
+        return ""
+    # 已知的默认 placeholder 路径
+    if raw_path == "data/data/anndata/visium_hne_adata.h5ad":
+        return ""
+    if not raw_path.endswith(".h5ad"):
+        return ""
+    if not os.path.exists(raw_path):
+        return ""
+    return os.path.abspath(raw_path)
+
+
 # ══════════════════════════════════════════
 # 辅助函数
 # ══════════════════════════════════════════
@@ -605,18 +629,26 @@ with tab1:
         # 保存用户输入
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # 自动加载数据（如果尚未加载）——仅校验文件存在，具体加载由 graph.invoke 负责
-        if not st.session_state.data_loaded and data_path:
-            if os.path.exists(data_path):
-                st.session_state.data_loaded = True
-                st.session_state.data_info = {
-                    "n_obs": "—（分析后显示）",
-                    "n_vars": "—（分析后显示）",
-                    "file_size_mb": f"{os.path.getsize(data_path) / (1024 * 1024):.1f}",
-                }
-            else:
-                st.error(f"数据文件不存在: {data_path}")
-                st.stop()
+        # ★ 校验数据路径：排除 placeholder / 不存在的路径 / 非 h5ad
+        valid_data_path = normalize_data_path(data_path)
+
+        if not valid_data_path:
+            st.error(
+                "⚠️ 未检测到有效的 .h5ad 数据文件。\n\n"
+                "请先在左侧侧边栏上传 `.h5ad` 文件，"
+                "或填写真实存在的 `.h5ad` 文件路径。"
+            )
+            st.info("上传数据后，你可以输入：`执行完整分析`、`只做QC和聚类` 等。")
+            st.stop()
+
+        # 自动加载数据（如果尚未加载）
+        if not st.session_state.data_loaded:
+            st.session_state.data_loaded = True
+            st.session_state.data_info = {
+                "n_obs": "—（分析后显示）",
+                "n_vars": "—（分析后显示）",
+                "file_size_mb": f"{os.path.getsize(valid_data_path) / (1024 * 1024):.1f}",
+            }
 
         # 构建初始 state
         session_id = st.session_state.session_id
@@ -636,7 +668,7 @@ with tab1:
         }
         initial_state = get_initial_state(
             user_input=prompt,
-            data_path=data_path or "",
+            data_path=valid_data_path,
             data_type=data_type if data_type != "auto" else "unknown",
             step_params=step_params,
             session_id=st.session_state.session_id,

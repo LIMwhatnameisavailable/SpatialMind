@@ -1,4 +1,12 @@
-# 🧬 SpatialMind: LangGraph-Powered Spatial Transcriptomics Analysis Agent
+#!/usr/bin/env python3
+"""Step 4-5: Write README.md and fix .env.example, then upload to server"""
+import paramiko
+
+HOST = "47.101.68.210"; PORT = 22; USER = "root"; PASSWORD = "jovial888@"
+client = paramiko.SSHClient(); client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(HOST, PORT, USER, PASSWORD, timeout=15)
+
+readme = """# 🧬 SpatialMind: LangGraph-Powered Spatial Transcriptomics Analysis Agent
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)]()
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.2%2B-orange)]()
@@ -111,7 +119,7 @@ cd SpatialMind
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\\Scripts\\activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -296,31 +304,6 @@ This is the final project for a **Computational Biology** course at Southeast Un
 
 ---
 
----
-
-## 📜 Scripts & Experiment Records
-
-The `scripts/` directory contains the diagnostic and repair scripts used during the P0 hotfixes on the demo server. These are kept as **experiment records** for reference:
-
-- **Routing fixes**: QA no-data guard, intent_parser routing
-- **Figure gallery**: Three-level fallback mechanism
-- **None-safety**: `_state or {}` pattern, step_results type checking
-- **Skill exception handling**: `ImportError` → `Exception` catch scope
-- **Deployment**: systemd service, swap configuration
-- **Verification**: Route tests, log analysis, health checks
-
-> ⚠️ All credential values (passwords, IPs) in these scripts have been replaced with placeholders for public sharing.
-
-| File | Purpose |
-|------|---------|
-| `_patch_*.py` | Appy code patches via paramiko |
-| `_fix_*.py` | Targeted bug fixes |
-| `_verify_*.py` / `_check_*.py` | Verification and diagnostics |
-| `_run_route_test*.py` | LangGraph routing tests |
-| `_restart_*.py` | Streamlit restart helpers |
-| `final_step*.py` | Final project cleanup and deployment |
-| `_ssh_helper.py` | SSH connection template (scrubbed) |
-
 ## 📄 License
 
 This project is provided for educational use as part of the SEU Computational Biology course.
@@ -328,3 +311,36 @@ This project is provided for educational use as part of the SEU Computational Bi
 ---
 
 *Built with [LangGraph](https://langchain-ai.github.io/langgraph/), [Scanpy](https://scanpy.readthedocs.io/), [Squidpy](https://squidpy.readthedocs.io/), and [Streamlit](https://streamlit.io/)*
+"""
+
+# Also write .env.example
+env_example = """# SpatialMind Environment Configuration
+# Copy this file to .env and fill in your API keys.
+
+PPIO_API_KEY=your_api_key_here
+PPIO_BASE_URL=https://api.ppio.com/anthropic
+LLM_MODEL_NAME=deepseek/deepseek-v4-flash
+"""
+
+sftp = client.open_sftp()
+with sftp.open("/root/SpatialMind/README.md", "w") as f:
+    f.write(readme)
+print(f"README.md written: {len(readme)} bytes")
+
+with sftp.open("/root/SpatialMind/.env.example", "w") as f:
+    f.write(env_example)
+print(f".env.example written: {len(env_example)} bytes (fixed variable names)")
+
+# Verify .env.example
+def run(cmd):
+    stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
+    ec = stdout.channel.recv_exit_status()
+    return stdout.read().decode("utf-8", errors="replace").strip()
+
+o = run("cat /root/SpatialMind/.env.example")
+print(f"\n=== .env.example ===")
+print(o)
+
+sftp.close()
+client.close()
+print("Step 4-5 DONE")

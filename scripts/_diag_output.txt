@@ -1,0 +1,379 @@
+=== GIT STATUS ===
+## main...origin/main
+?? logs/
+?? venv/
+main
+0b21f1c fix no-data routing and disable default svg on lightweight server
+18cc5a7 Merge pull request #2 from LIMwhatnameisavailable/server-merge-base
+c84abb6 fix app QA rendering flow and Streamlit top bar styling
+
+=== APP.PY normalize_data_path ===
+
+
+# ── 数据路径校验 ────────────────────────────────────────────
+def normalize_data_path(raw_path: str) -> str:
+    """
+    校验用户提供的数据路径，只返回真实存在的 .h5ad 文件路径。
+    不存在的路径、placeholder 提示文字、非 .h5ad 后缀 → 返回 ""。
+    确保不上传数据时 no_data 守卫能正确触发。
+    """
+    raw_path = (raw_path or "").strip()
+    if not raw_path:
+        return ""
+    # 排除 UI placeholder 和默认提示文本
+    lower = raw_path.lower()
+    if "placeholder" in lower or "visium_hne_adata" in lower:
+        return ""
+    # 已知的默认 placeholder 路径
+    if raw_path == "data/data/anndata/visium_hne_adata.h5ad":
+        return ""
+    if not raw_path.endswith(".h5ad"):
+        return ""
+    if not os.path.exists(raw_path):
+        return ""
+    return os.path.abspath(raw_path)
+
+
+# ══════════════════════════════════════════
+# 辅助函数
+
+=== APP.PY render_agent_response ===
+# 统一渲染函数
+# ══════════════════════════════════════════
+
+def render_agent_response(final_state: dict) -> bool:
+    """
+    统一渲染函数：QA / no_data 直接显示文字回答，analysis 返回 False。
+    返回 True 表示已处理（不再显示分析步骤）。
+    """
+    request_type = final_state.get("request_type", "")
+    messages = final_state.get("messages", [])
+    is_complete = final_state.get("is_complete", False)
+    analysis_plan = final_state.get("analysis_plan", [])
+
+    assistant_msgs = [m for m in messages if m.get("role") == "assistant"]
+    last_answer = assistant_msgs[-1].get("content", "") if assistant_msgs else ""
+
+    if request_type in ("qa", "no_data", "result_explanation") or (
+        is_complete and not analysis_plan
+    ):
+        st.divider()
+        if last_answer:
+            st.markdown("### 🤖 Agent 回答")
+            with st.container():
+                st.markdown(last_answer)
+        else:
+            st.warning(
+                final_state.get("error_message")
+                or "Agent 已完成，但没有生成可显示的回答。"
+            )
+        return True
+
+    return False
+
+
+# ══════════════════════════════════════════
+# 侧边栏
+# ══════════════════════════════════════════
+with st.sidebar:
+    st.markdown("""
+    <div style='text-align:center; padding: 16px 0 8px 0;'>
+        <div style='font-size:2em;'>🧬</div>
+        <div style='font-size:1.3em; font-weight:700; color:#58a6ff;'>SpatialMind</div>
+        <div style='font-size:0.75em; color:#8b949e; margin-top:4px;'>空间转录组智能分析平台</div>
+    </div>
+    <hr style='border-color:#30363d; margin:8px 0;'>
+    """, unsafe_allow_html=True)
+
+=== APP.PY run_clicked block (615-735) ===
+    )
+
+    col_run, col_status = st.columns([1, 3])
+    with col_run:
+        run_clicked = st.button("🚀 发送给 Agent", type="primary", use_container_width=True)
+    with col_status:
+        if st.session_state.data_loaded:
+            info = st.session_state.data_info
+            st.caption(
+                f"数据已加载: {info.get('n_obs', '?')} 细胞 × {info.get('n_vars', '?')} 基因"
+            )
+
+    # ── 分析执行 ──
+    if run_clicked:
+        # 保存用户输入
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # ★ 校验数据路径：排除 placeholder / 不存在的路径 / 非 h5ad
+        valid_data_path = normalize_data_path(data_path)
+
+        if not valid_data_path:
+            st.error(
+                "⚠️ 未检测到有效的 .h5ad 数据文件。\n\n"
+                "请先在左侧侧边栏上传 `.h5ad` 文件，"
+                "或填写真实存在的 `.h5ad` 文件路径。"
+            )
+            st.info("上传数据后，你可以输入：`执行完整分析`、`只做QC和聚类` 等。")
+            st.stop()
+
+        # 自动加载数据（如果尚未加载）
+        if not st.session_state.data_loaded:
+            st.session_state.data_loaded = True
+            st.session_state.data_info = {
+                "n_obs": "—（分析后显示）",
+                "n_vars": "—（分析后显示）",
+                "file_size_mb": f"{os.path.getsize(valid_data_path) / (1024 * 1024):.1f}",
+            }
+
+        # 构建初始 state
+        session_id = st.session_state.session_id
+
+        # 创建 session 子目录并清理旧 session
+        run_dir = manage_session_figures(session_id, keep_n=2)
+        st.session_state.output_dir = run_dir
+        st.session_state.available_runs = _list_available_runs(session_id=session_id)
+        st.session_state.selected_run = run_dir
+
+        step_params = {
+            "cluster": {"resolution": clustering_resolution},
+            "dimred": {"n_pcs": n_pcs, "n_neighbors": 15},
+            "preprocess": {"n_top_genes": n_top_genes},
+            "enable_nature_publish": enable_nature_publish,
+            "enable_bio_insight": enable_bio_insight,
+        }
+        initial_state = get_initial_state(
+            user_input=prompt,
+            data_path=valid_data_path,
+            data_type=data_type if data_type != "auto" else "unknown",
+            step_params=step_params,
+            session_id=st.session_state.session_id,
+            output_dir=run_dir,
+        )
+
+        st.session_state.analysis_start_time = datetime.now()
+
+        # 执行 Agent
+        with st.status("🧠 Agent 分析中...", expanded=True) as status:
+            try:
+                result = langgraph_app.invoke(
+                    initial_state,
+                    config={"configurable": {"thread_id": st.session_state.session_id}},
+                )
+                st.session_state.agent_state = result
+                st.session_state.analysis_done = True
+                status.update(label="✅ 分析完成!", state="complete")
+            except Exception as e:
+                status.update(label="❌ 分析失败", state="error")
+                st.error(f"Agent 执行出错: {e}")
+                st.exception(e)
+
+        st.rerun()
+
+    # ── 分析完成后：展示结果 ──
+    if st.session_state.analysis_done and st.session_state.agent_state:
+        agent_state = st.session_state.agent_state
+
+        # 先尝试统一渲染（QA / no_data 直接显示文字回答）
+        handled = render_agent_response(agent_state)
+
+        # 只有 analysis 请求才渲染分析流程
+        if not handled:
+            # analysis 结果渲染
+            completed = agent_state.get("completed_steps", [])
+            plan = agent_state.get("analysis_plan", [])
+            figures = agent_state.get("figures", {})
+            step_results = agent_state.get("step_results", {})
+            explanations = agent_state.get("explanations", {})
+            skill_outputs = agent_state.get("skill_outputs", {})
+
+            st.divider()
+            st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
+
+            # ── 中部：每步结果（卡片式布局） ──
+            if plan:
+                for idx, step in enumerate(plan):
+                    st.markdown(f'<div class="step-card">', unsafe_allow_html=True)
+
+                    st.subheader(f"📊 Step {idx+1}: {step.upper()}")
+
+                    # 全宽展示该步骤的所有独立图
+                    if step in step_results:
+                        all_figs = step_results[step].get("figure_paths", [])
+                        all_figs = [f for f in all_figs if os.path.exists(f)]
+
+                        if all_figs:
+                            for fig_path in all_figs:
+                                # 获取图表元数据
+                                fname = os.path.basename(fig_path)
+                                chart_type, description = get_figure_meta(fname)
+                                type_icons = {
+                                    "小提琴图": "🎻", "散点图": "🔵", "柱状图": "📊",
+
+=== INTENT_PARSER full ===
+     1	"""
+     2	intent_parser 节点 — 解析用户自然语言输入
+     3	
+     4	职责：
+     5	1. 判断意图类型：qa（问答）/ analysis（分析）
+     6	2. qa 意图直接调用 LLM 回答，设置 is_complete=True，跳过分析流程
+     7	3. analysis 意图：提取数据路径、数据类型、分析关键词
+     8	"""
+     9	
+    10	import os
+    11	import re
+    12	from agent.state import AgentState
+    13	from agent.llm_client import call_llm_with_thinking
+    14	import logging
+    15	
+    16	logger = logging.getLogger(__name__)
+    17	
+    18	# qa 意图关键词（命中任意一个 → 纯问答，不启动分析流程）
+    19	QA_KEYWORDS = [
+    20	    "什么是", "是什么", "介绍", "解释", "为什么", "原理", "概念",
+    21	    "怎么理解", "有什么区别", "什么意思", "定义", "背景",
+    22	    "what is", "what are", "explain", "why", "how does", "difference between",
+    23	    "introduction", "overview", "describe",
+    24	]
+    25	
+    26	QA_SYSTEM_PROMPT = """你是空间转录组学领域的专业助手。
+    27	用简洁清晰的中文回答用户的问题，适当使用分点说明。
+    28	不要编造数据或引用不存在的文献。"""
+    29	
+    30	
+    31	def _is_qa_intent(user_input: str) -> bool:
+    32	    """判断是否为纯问答意图"""
+    33	    text = user_input.lower().strip()
+    34	    return any(kw in text for kw in QA_KEYWORDS)
+    35	
+    36	
+    37	def intent_parser_node(state: AgentState) -> dict:
+    38	    user_input = state.get("user_input", "")
+    39	    session_id = state.get("session_id", "default")
+    40	    data_path = state.get("data_path", "")
+    41	
+    42	    # ── QA 意图：直接回答，不进入分析流程 ──────────────────────────
+    43	    if _is_qa_intent(user_input):
+    44	        logger.info(f"[intent_parser] 识别为 QA 意图: {user_input[:50]}")
+    45	        try:
+    46	            thinking, answer = call_llm_with_thinking(
+    47	                prompt=user_input,
+    48	                system=QA_SYSTEM_PROMPT,
+    49	            )
+    50	        except Exception as e:
+    51	            logger.error(f"QA LLM 调用失败: {e}")
+    52	            answer = "抱歉，暂时无法回答该问题，请稍后重试。"
+    53	            thinking = ""
+    54	
+    55	        return {
+    56	            "request_type": "qa",
+    57	            "data_path": data_path,
+    58	            "data_type": "unknown",
+    59	            "adata_cache_key": f"session_{session_id}",
+    60	            "analysis_plan": [],
+    61	            "current_step": "",
+    62	            "completed_steps": [],
+    63	            "figures": {},
+    64	            "step_results": {"intent_thinking": thinking},
+    65	            "explanations": {},
+    66	            "skill_outputs": {},
+    67	            "error_message": None,
+    68	            "retry_count": 0,
+    69	            "max_retries": 2,
+    70	            "is_complete": True,
+    71	            "messages": [
+    72	                {"role": "user", "content": user_input},
+    73	                {"role": "assistant", "content": answer},
+    74	            ],
+    75	        }
+    76	
+    77	    # ── Analysis 意图：走正常分析流程 ──────────────────────────────
+    78	    logger.info(f"[intent_parser] 识别为 Analysis 意图: {user_input[:50]}")
+    79	
+    80	    # 1. 从输入中提取 .h5ad 路径
+    81	    path_patterns = re.findall(r"[\w/\\:.-]+\.h5ad", user_input)
+    82	    if path_patterns:
+    83	        data_path = os.path.abspath(path_patterns[0])
+    84	    # 注意：不要自动扫描 data/ 目录找 h5ad 文件！
+    85	    # 只有用户明确在侧边栏提供路径、上传文件、或在输入中写路径才算有数据。
+    86	    # 自动扫描会导致"未上传数据"的 no_data 守卫失效。
+    87	    elif data_path and not os.path.exists(data_path):
+    88	        data_path = ""
+    89	    if not data_path or not os.path.exists(data_path):
+    90	        data_path = ""
+    91	
+    92	    # 2. 如果没有可用 .h5ad 数据，禁止进入分析流程，避免 executor 报错
+    93	    if not data_path:
+    94	        msg = (
+    95	            "我还没有检测到可用的空间转录组数据文件。\n\n"
+    96	            "请先在侧边栏上传 `.h5ad` 文件，或者在输入中提供 `.h5ad` 文件路径。\n"
+    97	            "上传数据后，你可以输入：`执行完整分析`、`只做QC和聚类`、`找空间可变基因`。"
+    98	        )
+    99	
+   100	        return {
+   101	            "request_type": "no_data",
+   102	            "data_path": "",
+   103	            "data_type": "unknown",
+   104	            "adata_cache_key": f"session_{session_id}",
+   105	            "analysis_plan": [],
+   106	            "current_step": "",
+   107	            "completed_steps": [],
+   108	            "figures": {},
+   109	            "step_results": {},
+   110	            "explanations": {},
+   111	            "skill_outputs": {},
+   112	            "error_message": None,
+   113	            "retry_count": 0,
+   114	            "max_retries": 2,
+   115	            "is_complete": True,
+   116	            "messages": [
+   117	                {"role": "user", "content": user_input},
+   118	                {"role": "assistant", "content": msg},
+   119	            ],
+   120	        }
+   121	
+   122	    # 3. 数据类型判断
+   123	    data_type = "unknown"
+   124	    if data_path:
+   125	        lower_path = data_path.lower()
+   126	        if "stereo" in lower_path:
+   127	            data_type = "stereo"
+   128	        elif "visium" in lower_path:
+   129	            data_type = "visium"
+   130	
+   131	    # 3. 提取分析意图关键词
+   132	    intent_keywords = []
+   133	    intent_map = {
+   134	        "qc": ["qc", "quality", "quality control", "过滤", "质控"],
+   135	        "preprocess": ["normalize", "normalization", "归一化", "log", "hvg", "scale"],
+   136	        "dimred": ["pca", "umap", "降维", "dimensionality reduction"],
+   137	        "cluster": ["cluster", "clustering", "聚类", "leiden", "louvain"],
+   138	        "spatial": ["spatial", "空间", "分布", "distribute"],
+   139	        "marker": ["marker", "差异基因", "deg", "差异表达"],
+   140	        "svg": ["svg", "spatial variable", "空间可变"],
+   141	    }
+   142	    for step_name, keywords in intent_map.items():
+   143	        if any(kw in user_input.lower() for kw in keywords):
+   144	            intent_keywords.append(step_name)
+   145	
+   146	    if intent_keywords:
+   147	        analysis_plan = ["data_load"] + intent_keywords
+   148	    else:
+   149	        analysis_plan = ["data_load", "qc", "preprocess", "dimred", "cluster", "spatial", "marker"]
+   150	
+   151	    return {
+   152	        "request_type": "analysis",
+   153	        "data_path": data_path,
+   154	        "data_type": data_type,
+   155	        "adata_cache_key": f"session_{session_id}",
+   156	        "analysis_plan": analysis_plan,
+   157	        "current_step": "",
+   158	        "completed_steps": [],
+   159	        "figures": {},
+   160	        "step_results": {},
+   161	        "explanations": {},
+   162	        "skill_outputs": {},
+   163	        "error_message": None,
+   164	        "retry_count": 0,
+   165	        "max_retries": 2,
+   166	        "is_complete": False,
+   167	        "messages": [{"role": "user", "content": user_input}],
+   168	    }

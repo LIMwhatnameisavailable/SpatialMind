@@ -1,0 +1,246 @@
+=== session_state usage ===
+333:if "session_id" not in st.session_state:
+334:    st.session_state.session_id = str(uuid.uuid4())
+335:if "messages" not in st.session_state:
+336:    st.session_state.messages = []
+337:if "agent_state" not in st.session_state:
+338:    st.session_state.agent_state = None
+339:if "analysis_done" not in st.session_state:
+340:    st.session_state.analysis_done = False
+341:if "data_loaded" not in st.session_state:
+342:    st.session_state.data_loaded = False
+343:if "data_info" not in st.session_state:
+344:    st.session_state.data_info = {}
+345:if "analysis_start_time" not in st.session_state:
+346:    st.session_state.analysis_start_time = None
+347:if "output_dir" not in st.session_state:
+348:    st.session_state.output_dir = "outputs/figures"
+349:if "available_runs" not in st.session_state:
+350:    st.session_state.available_runs = []  # [{session_id, run_timestamp, path, n_figures, mtime_dt}, ...]
+351:if "selected_run" not in st.session_state:
+352:    st.session_state.selected_run = None  # 当前选中的 run path
+545:            st.session_state.data_loaded = True
+547:            st.session_state.data_info = {
+555:            st.session_state.data_loaded = False
+576:    st.caption(f"会话 `{st.session_state.session_id[:8]}...`")
+577:    if st.session_state.data_loaded:
+583:    current_dir = st.session_state.output_dir
+621:        if st.session_state.data_loaded:
+622:            info = st.session_state.data_info
+630:        st.session_state.messages.append({"role": "user", "content": prompt})
+645:        if not st.session_state.data_loaded:
+646:            st.session_state.data_loaded = True
+647:            st.session_state.data_info = {
+654:        session_id = st.session_state.session_id
+658:        st.session_state.output_dir = run_dir
+659:        st.session_state.available_runs = _list_available_runs(session_id=session_id)
+660:        st.session_state.selected_run = run_dir
+674:            session_id=st.session_state.session_id,
+678:        st.session_state.analysis_start_time = datetime.now()
+685:                    config={"configurable": {"thread_id": st.session_state.session_id}},
+687:                st.session_state.agent_state = result
+688:                st.session_state.analysis_done = True
+698:    if st.session_state.analysis_done and st.session_state.agent_state:
+699:        agent_state = st.session_state.agent_state
+816:    elif not st.session_state.analysis_done:
+828:    available_runs = st.session_state.available_runs
+830:        sid = st.session_state.session_id
+835:        st.session_state.available_runs = available_runs
+838:    selected = st.session_state.selected_run
+841:        st.session_state.selected_run = selected
+845:        current_dir = st.session_state.output_dir
+872:        st.session_state.selected_run = selected_run_path
+876:            st.session_state.available_runs = _list_available_runs(session_id=st.session_state.session_id)
+962:    last_state = st.session_state.get("agent_state", None)
+1058:    if not st.session_state.analysis_done or not st.session_state.agent_state:
+1061:        agent_state = st.session_state.agent_state
+1159:    if not st.session_state.analysis_done or not st.session_state.agent_state:
+1162:        agent_state = st.session_state.agent_state
+1188:            start = st.session_state.analysis_start_time
+1226:            file_name=f"spatialmind_state_{st.session_state.session_id[:8]}.json",
+
+=== app.py tab2 (figure gallery, 820-930) ===
+# ══════════════════════════════════════════
+# Tab 2 · 图表库（支持 Session 切换 + 降级回退）
+# ══════════════════════════════════════════
+with tab2:
+    st.header("🖼️ 图表库")
+    st.caption("浏览已生成的图表，按 Session 和 Run 分组。")
+
+    # ── Session / Run 选择器 ──
+    available_runs = st.session_state.available_runs
+    if not available_runs:
+        sid = st.session_state.session_id
+        # 优先用当前 session，降级到全部扫描
+        available_runs = _list_available_runs(session_id=sid)
+        if not available_runs:
+            available_runs = _list_available_runs(session_id=None)
+        st.session_state.available_runs = available_runs
+
+    # 降级：如果 selected_run 为空但 dir 有数据，取最新的
+    selected = st.session_state.selected_run
+    if not selected and available_runs:
+        selected = available_runs[0]["path"]
+        st.session_state.selected_run = selected
+
+    if available_runs:
+        # 构建选项标签：标记"当前分析"和"上次分析"
+        current_dir = st.session_state.output_dir
+        run_options = {}
+        for i, r in enumerate(available_runs):
+            label_parts = [f"{r['session_id'][:8]}.../{r['run_timestamp']}"]
+            if r["path"] == current_dir:
+                label_parts.append("← 当前")
+            elif i == 0:
+                label_parts.append("(最新)")
+            label_parts.append(f"{r['n_figures']} figs")
+            run_options[" · ".join(label_parts)] = r["path"]
+
+        default_label = None
+        if selected:
+            for label, path in run_options.items():
+                if path == selected:
+                    default_label = label
+                    break
+        if default_label is None:
+            default_label = list(run_options.keys())[0]
+
+        selected_label = st.selectbox(
+            "选择分析运行：",
+            options=list(run_options.keys()),
+            index=list(run_options.keys()).index(default_label),
+            key="run_selector",
+        )
+        selected_run_path = run_options[selected_label]
+        st.session_state.selected_run = selected_run_path
+
+        # 刷新按钮（重新扫描当前 session）
+        if st.button("🔄 刷新图表列表", use_container_width=True):
+            st.session_state.available_runs = _list_available_runs(session_id=st.session_state.session_id)
+            st.rerun()
+
+        # 扫描当前选中目录
+        fig_groups: dict[str, list[dict]] = {}
+        for root, _dirs, files in os.walk(selected_run_path):
+            for fname in sorted(files):
+                if not fname.endswith(".png"):
+                    continue
+                fpath = os.path.join(root, fname)
+                mtime_dt = datetime.fromtimestamp(os.path.getmtime(fpath))
+                step = get_step_name_from_filename(fname)
+                fig_groups.setdefault(step, []).append({
+                    "path": fpath,
+                    "filename": fname,
+                    "mtime": mtime_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    "mtime_dt": mtime_dt,
+                })
+
+        st.caption(f"📁 {selected_run_path}  ·  {sum(len(v) for v in fig_groups.values())} 张图")
+
+        # 按步骤分组展示
+        step_order = ["qc", "preprocess", "dimred", "cluster", "spatial", "marker", "svg"]
+
+        for step in step_order:
+            if step not in fig_groups:
+                continue
+            images = fig_groups[step]
+            display_name = get_step_display_name(step)
+
+            latest_mtime = max(img["mtime_dt"] for img in images)
+            time_str = latest_mtime.strftime("%Y-%m-%d %H:%M")
+
+            with st.expander(f"{display_name} · {len(images)}张图 · {time_str}", expanded=True):
+                for i, img in enumerate(images):
+                    chart_type, description = get_figure_meta(img["filename"])
+
+                    st.image(img["path"], use_container_width=True)
+
+                    type_icons = {
+                        "小提琴图": "🎻", "散点图": "🔵", "柱状图": "📊",
+                        "折线图": "📈", "UMAP图": "🌀", "条形图": "📊",
+                    }
+                    icon = type_icons.get(chart_type, "🖼️")
+
+                    st.markdown(
+                        f"<div style='margin-top:4px;'>"
+                        f"<span style='background:#1e2130; padding:2px 10px; border-radius:12px; "
+                        f"font-size:0.85em; color:#00d4aa; border:1px solid #00d4aa44;'>{icon} {chart_type}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    if description:
+                        st.markdown(
+                            f"<div style='color:#8892a4; font-style:italic; font-size:0.9em; margin:2px 0 6px 0;'>{description}</div>",
+
+=== latest output files by mtime ===
+1782387828.3493051430 outputs/figures/panel_figure_20260625_194345.png
+1782387798.8461251400 outputs/figures/marker_umap_20260625_194318_29.png
+1782387770.7840027680 outputs/figures/spatial_cluster_20260625_194249_30.png
+1782387769.6799586120 outputs/figures/spatial_base_20260625_194249_30.png
+1782387766.4768305000 outputs/figures/clustering_20260625_194245_95.png
+1782387755.8924071690 outputs/figures/dimred_20260625_194235_44.png
+1782387663.6227167530 outputs/figures/preprocess_20260625_194102_97.png
+1782387658.1974997670 outputs/figures/qc_20260625_194056_88.png
+1782387623.2531021420 outputs/figures/panel_figure_20260625_194019.png
+1782387586.8466460280 outputs/figures/marker_umap_20260625_193946_34.png
+1782387561.2926239760 outputs/figures/spatial_cluster_20260625_193920_15.png
+1782387560.4955920980 outputs/figures/spatial_base_20260625_193920_15.png
+1782387556.1744192680 outputs/figures/clustering_20260625_193915_64.png
+1782387542.7838837020 outputs/figures/dimred_20260625_193902_35.png
+1782387422.1530589660 outputs/figures/preprocess_20260625_193701_60.png
+1782387407.7864843620 outputs/figures/qc_20260625_193646_31.png
+1782386379.4763598100 outputs/figures/panel_figure_20260625_191935.png
+1782386338.0507031490 outputs/figures/marker_umap_20260625_191857_48.png
+1782386134.3765579810 outputs/figures/panel_figure_20260625_191530.png
+1782386097.8490971940 outputs/figures/svg_top_20260625_191457_50.png
+
+=== outputs/figures directory listing ===
+total 206540
+drwxr-xr-x 8 root root   16384 Jun 25 19:43 .
+drwxr-xr-x 4 root root    4096 Jun 25 00:44 ..
+drwxr-xr-x 4 root root    4096 Jun 25 19:40 2cb04ac5-f39a-4796-94be-1f2c73f67278
+drwxr-xr-x 3 root root    4096 Jun 25 18:29 7b06fc45-5fd8-4787-8847-5d221a61c4ae
+drwxr-xr-x 3 root root    4096 Jun 25 19:08 8cb91f5b-e7be-4da6-b95e-f93d7ecf851e
+drwxr-xr-x 3 root root    4096 Jun 25 19:10 be8703a8-a40c-4051-81d4-25d6359616e4
+-rw-r--r-- 1 root root  763504 Jun 25 00:42 clustering_20260625_004258_57.png
+-rw-r--r-- 1 root root 2320290 Jun 25 00:43 clustering_20260625_004258_57.svg
+-rw-r--r-- 1 root root  946281 Jun 25 11:39 clustering_20260625_113951_43.png
+-rw-r--r-- 1 root root 6697205 Jun 25 11:39 clustering_20260625_113951_43.svg
+-rw-r--r-- 1 root root  608375 Jun 25 11:51 clustering_20260625_115126_92.png
+-rw-r--r-- 1 root root 2320837 Jun 25 11:51 clustering_20260625_115126_92.svg
+-rw-r--r-- 1 root root  658085 Jun 25 11:51 clustering_20260625_115133_73.png
+-rw-r--r-- 1 root root 2321612 Jun 25 11:51 clustering_20260625_115133_73.svg
+-rw-r--r-- 1 root root  763504 Jun 25 12:02 clustering_20260625_120248_30.png
+-rw-r--r-- 1 root root 2320290 Jun 25 12:02 clustering_20260625_120248_30.svg
+-rw-r--r-- 1 root root  763504 Jun 25 12:16 clustering_20260625_121601_71.png
+-rw-r--r-- 1 root root 2320290 Jun 25 12:16 clustering_20260625_121601_71.svg
+-rw-r--r-- 1 root root  763504 Jun 25 14:17 clustering_20260625_141708_54.png
+-rw-r--r-- 1 root root 2320290 Jun 25 14:17 clustering_20260625_141708_54.svg
+-rw-r--r-- 1 root root  714215 Jun 25 19:13 clustering_20260625_191343_68.png
+-rw-r--r-- 1 root root 2320290 Jun 25 19:13 clustering_20260625_191343_68.svg
+-rw-r--r-- 1 root root  763504 Jun 25 19:13 clustering_20260625_191352_77.png
+-rw-r--r-- 1 root root 2320290 Jun 25 19:13 clustering_20260625_191352_77.svg
+-rw-r--r-- 1 root root  763504 Jun 25 19:39 clustering_20260625_193915_64.png
+-rw-r--r-- 1 root root 2320290 Jun 25 19:39 clustering_20260625_193915_64.svg
+-rw-r--r-- 1 root root  763504 Jun 25 19:42 clustering_20260625_194245_95.png
+-rw-r--r-- 1 root root 2320290 Jun 25 19:42 clustering_20260625_194245_95.svg
+drwxr-xr-x 3 root root    4096 Jun 25 16:55 d5f99010-461b-42a7-aec5-f0f51bfaf706
+
+=== any session subdirs ===
+outputs/figures
+outputs/figures/be8703a8-a40c-4051-81d4-25d6359616e4
+outputs/figures/be8703a8-a40c-4051-81d4-25d6359616e4/20260625_191026
+outputs/figures/d5f99010-461b-42a7-aec5-f0f51bfaf706
+outputs/figures/d5f99010-461b-42a7-aec5-f0f51bfaf706/20260625_165514
+outputs/figures/8cb91f5b-e7be-4da6-b95e-f93d7ecf851e
+outputs/figures/8cb91f5b-e7be-4da6-b95e-f93d7ecf851e/20260625_190835
+outputs/figures/7b06fc45-5fd8-4787-8847-5d221a61c4ae
+outputs/figures/7b06fc45-5fd8-4787-8847-5d221a61c4ae/20260625_182933
+outputs/figures/f49c61f9-f724-4251-a5dc-1836408ae85f
+outputs/figures/f49c61f9-f724-4251-a5dc-1836408ae85f/20260625_190751
+outputs/figures/f49c61f9-f724-4251-a5dc-1836408ae85f/20260625_190736
+outputs/figures/2cb04ac5-f39a-4796-94be-1f2c73f67278
+outputs/figures/2cb04ac5-f39a-4796-94be-1f2c73f67278/20260625_194043
+outputs/figures/2cb04ac5-f39a-4796-94be-1f2c73f67278/20260625_193633
+
+=== check if agent state has 'figures' key populated ===

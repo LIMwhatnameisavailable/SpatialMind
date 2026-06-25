@@ -1,0 +1,127 @@
+=== executor.py full ===
+     1	"""
+     2	executor 节点 — 执行单步分析（不调用 LLM）
+     3	
+     4	职责：
+     5	1. 从 analysis_plan 中取出下一步骤
+     6	2. 调用对应的 tool 函数
+     7	3. 更新 state 中的 figures、step_results
+     8	4. 将生成的图片路径保存到 output/figures/
+     9	
+    10	工具函数映射表：
+    11	    qc         -> tools.qc.run_qc
+    12	    preprocess -> tools.preprocessing.run_preprocessing
+    13	    dimred     -> tools.dimred.run_dimred
+    14	    cluster    -> tools.clustering.run_clustering
+    15	    spatial    -> tools.spatial_viz.run_spatial_viz
+    16	    marker     -> tools.marker_genes.run_marker_analysis
+    17	    svg        -> tools.svg.run_svg
+    18	"""
+    19	
+    20	import importlib
+    21	from datetime import datetime
+    22	from agent.state import AgentState
+    23	
+    24	# 步骤 -> (模块路径, 函数名)
+    25	TOOL_MAP = {
+    26	    "data_load": ("tools.data_loader", "load_data"),
+    27	    "qc": ("tools.qc", "run_qc"),
+    28	    "preprocess": ("tools.preprocessing", "run_preprocessing"),
+    29	    "dimred": ("tools.dimred", "run_dimred"),
+    30	    "cluster": ("tools.clustering", "run_clustering"),
+    31	    "spatial": ("tools.spatial_viz", "run_spatial_viz"),
+    32	    "marker": ("tools.marker_genes", "run_marker_analysis"),
+    33	    "svg": ("tools.svg", "run_svg"),
+    34	}
+    35	
+    36	
+    37	def executor_node(state: AgentState) -> dict:
+    38	    """执行分析计划中的下一个步骤"""
+    39	    analysis_plan = state.get("analysis_plan", [])
+    40	    completed_steps = state.get("completed_steps", [])
+    41	    step_params = state.get("step_params", {})
+    42	    adata_cache_key = state.get("adata_cache_key", "")
+    43	
+    44	    # 找到下一个未完成的步骤
+    45	    next_step = None
+    46	    for step in analysis_plan:
+    47	        if step not in completed_steps:
+    48	            next_step = step
+    49	            break
+    50	
+    51	    if next_step is None:
+    52	        return {"is_complete": True, "current_step": ""}
+    53	
+    54	    # 检查工具是否存在
+    55	    if next_step not in TOOL_MAP:
+    56	        return {
+    57	            "error_message": f"未知步骤: {next_step}",
+    58	            "retry_count": state.get("retry_count", 0) + 1,
+    59	        }
+    60	
+    61	    # 动态导入并调用工具函数
+    62	    module_path, func_name = TOOL_MAP[next_step]
+    63	    try:
+    64	        module = importlib.import_module(module_path)
+    65	        tool_func = getattr(module, func_name)
+    66	    except (ImportError, AttributeError) as e:
+    67	        return {
+    68	            "error_message": f"加载工具 {next_step} 失败: {e}",
+    69	            "retry_count": state.get("retry_count", 0) + 1,
+    70	        }
+    71	
+    72	    # 获取该步骤的参数
+    73	    params = step_params.get(next_step, {})
+    74	    # 注入 output_dir（优先用 state.output_dir，某些步骤可能自定义覆盖）
+    75	    global_output_dir = state.get("output_dir", "outputs/figures")
+    76	    if "output_dir" not in params:
+    77	        params = dict(params, output_dir=global_output_dir)
+    78	
+    79	    # 执行工具
+    80	    try:
+    81	        # 特殊处理 data_load：需额外传入 data_path
+    82	        if next_step == "data_load":
+    83	            data_path = state.get("data_path", "")
+    84	            result = tool_func(adata_key_or_path=adata_cache_key, file_path=data_path)
+    85	        else:
+    86	            result = tool_func(adata_key=adata_cache_key, **params)
+    87	    except Exception as e:
+    88	        return {
+    89	            "error_message": f"执行 {next_step} 时出错: {e}",
+    90	            "retry_count": state.get("retry_count", 0) + 1,
+    91	        }
+    92	
+    93	    # 处理结果
+    94	    if result.get("status") == "error":
+    95	        return {
+    96	            "error_message": f"{next_step} 执行失败: {result.get('error', '未知错误')}",
+    97	            "retry_count": state.get("retry_count", 0) + 1,
+    98	        }
+    99	
+   100	    # 成功 —— 更新 state
+   101	    figures = dict(state.get("figures", {}))
+   102	    step_results = dict(state.get("step_results", {}))
+   103	
+   104	    figure_paths = result.get("figure_paths", [])
+   105	    if figure_paths:
+   106	        figures[next_step] = figure_paths[-1]  # 保存最后一张图为主图
+   107	
+   108	    step_results[next_step] = {
+   109	        "summary": result.get("summary", ""),
+   110	        "metrics": result.get("metrics", {}),
+   111	        "figure_paths": figure_paths,
+   112	        "timestamp": datetime.now().isoformat(),
+   113	    }
+   114	
+   115	    updated_figures = dict(state.get("figures", {}))
+   116	    if figure_paths:
+   117	        updated_figures[next_step] = figure_paths[-1]
+   118	
+   119	    return {
+   120	        "current_step": next_step,
+   121	        "completed_steps": completed_steps + [next_step],
+   122	        "figures": updated_figures,
+   123	        "step_results": step_results,
+   124	        "retry_count": 0,  # 重置重试计数
+   125	        "error_message": None,
+   126	    }

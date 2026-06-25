@@ -275,6 +275,33 @@ hr { border-color: #30363d !important; }
     border: 1px solid #30363d;
     border-radius: 8px;
 }
+
+/* ════════════════════════════════════════════
+   隐藏顶部白条 — 以下选择器消除 Streamlit
+   默认的白色 header / toolbar / decoration /
+   hamburger menu / footer，使深色背景无缝。
+   ════════════════════════════════════════════ */
+[data-testid="stHeader"] {
+    background: #0d1117 !important;
+    height: 0.1rem !important;
+    border-bottom: none !important;
+}
+[data-testid="stToolbar"] {
+    display: none !important;
+}
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+#MainMenu {
+    visibility: hidden !important;
+}
+footer {
+    visibility: hidden !important;
+}
+/* 在隐藏 header 后给主内容区补回合理的顶部间距，避免内容贴顶 */
+.main .block-container {
+    padding-top: 2rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -640,9 +667,10 @@ with tab1:
         agent_state = st.session_state.agent_state
 
         # 先尝试统一渲染（QA / no_data 直接显示文字回答）
-        if render_agent_response(agent_state):
-            pass  # 已由 render_agent_response 处理
-        else:
+        handled = render_agent_response(agent_state)
+
+        # 只有 analysis 请求才渲染分析流程
+        if not handled:
             # analysis 结果渲染
             completed = agent_state.get("completed_steps", [])
             plan = agent_state.get("analysis_plan", [])
@@ -653,104 +681,105 @@ with tab1:
 
             st.divider()
             st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
-        # ── 中部：每步结果（卡片式布局） ──
-        if plan:
-            for idx, step in enumerate(plan):
-                st.markdown(f'<div class="step-card">', unsafe_allow_html=True)
 
-                st.subheader(f"📊 Step {idx+1}: {step.upper()}")
+            # ── 中部：每步结果（卡片式布局） ──
+            if plan:
+                for idx, step in enumerate(plan):
+                    st.markdown(f'<div class="step-card">', unsafe_allow_html=True)
 
-# 全宽展示该步骤的所有独立图
-                if step in step_results:
-                    all_figs = step_results[step].get("figure_paths", [])
-                    all_figs = [f for f in all_figs if os.path.exists(f)]
+                    st.subheader(f"📊 Step {idx+1}: {step.upper()}")
 
-                    if all_figs:
-                        for fig_path in all_figs:
-                            # 获取图表元数据
-                            fname = os.path.basename(fig_path)
-                            chart_type, description = get_figure_meta(fname)
-                            type_icons = {
-                                "小提琴图": "🎻", "散点图": "🔵", "柱状图": "📊",
-                                "折线图": "📈", "UMAP图": "🌀", "条形图": "📊",
-                            }
-                            icon = type_icons.get(chart_type, "🖼️")
-                            caption = f"{icon} {chart_type}"
-                            if description:
-                                caption += f" — {description}"
-                            st.image(fig_path, caption=caption, use_container_width=True)
+                    # 全宽展示该步骤的所有独立图
+                    if step in step_results:
+                        all_figs = step_results[step].get("figure_paths", [])
+                        all_figs = [f for f in all_figs if os.path.exists(f)]
+
+                        if all_figs:
+                            for fig_path in all_figs:
+                                # 获取图表元数据
+                                fname = os.path.basename(fig_path)
+                                chart_type, description = get_figure_meta(fname)
+                                type_icons = {
+                                    "小提琴图": "🎻", "散点图": "🔵", "柱状图": "📊",
+                                    "折线图": "📈", "UMAP图": "🌀", "条形图": "📊",
+                                }
+                                icon = type_icons.get(chart_type, "🖼️")
+                                caption = f"{icon} {chart_type}"
+                                if description:
+                                    caption += f" — {description}"
+                                st.image(fig_path, caption=caption, use_container_width=True)
+                        else:
+                            # 没有图片时，展示指标
+                            metrics = step_results[step].get("metrics", {})
+                            if metrics:
+                                st.markdown("**📈 关键指标**")
+                                st.json(metrics)
                     else:
-                        # 没有图片时，展示指标
-                        metrics = step_results[step].get("metrics", {})
-                        if metrics:
-                            st.markdown("**📈 关键指标**")
-                            st.json(metrics)
-                else:
-                    st.info("暂无结果。")
+                        st.info("暂无结果。")
 
-                # 解释文字 — 始终在图片下方
-                if step in explanations:
-                    st.markdown("---")
-                    st.markdown(f"**📝 生物学解释**")
-                    st.markdown(explanations[step])
-                else:
-                    st.info("暂无解释。")
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        # ── 下方：BioInsight 输出 ──
-        st.divider()
-        st.subheader("🧠 生物学洞察（BioInsightSkill）")
-
-        bio = skill_outputs.get("bio_insight", {})
-        if bio:
-            col1, col2 = st.columns(2)
-            with col1:
-                if bio.get("spatial_story"):
-                    st.markdown("**空间叙事：**")
-                    st.info(bio["spatial_story"])
-                if bio.get("qc_interpretation"):
-                    with st.expander("QC 解读"):
-                        st.markdown(bio["qc_interpretation"])
-
-            with col2:
-                if bio.get("cluster_names"):
-                    st.markdown("**Cluster 命名：**")
-                    names = bio["cluster_names"]
-                    if isinstance(names, dict):
-                        st.json(names)
+                    # 解释文字 — 始终在图片下方
+                    if step in explanations:
+                        st.markdown("---")
+                        st.markdown(f"**📝 生物学解释**")
+                        st.markdown(explanations[step])
                     else:
-                        st.markdown(str(names))
-                if bio.get("insights"):
-                    with st.expander("关键发现"):
-                        st.markdown(bio["insights"])
+                        st.info("暂无解释。")
 
-            if bio.get("disclaimer"):
-                st.caption(bio["disclaimer"])
-        else:
-            st.info("BioInsightSkill 未启用或未生成输出。")
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-        # NaturePublish 快速预览
-        nature = skill_outputs.get("nature_publish", {})
-        if nature:
+            # ── 下方：BioInsight 输出 ──
             st.divider()
-            st.subheader("📄 NaturePublishSkill 预览")
-            if nature.get("methods"):
-                st.markdown(
-                    f'<div class="step-card">'
-                    f'<h4>📝 Methods 段落</h4>'
-                    f'{nature["methods"]}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            if nature.get("captions"):
-                st.markdown(
-                    f'<div class="step-card">'
-                    f'<h4>🏷️ 图注（Figure Captions）</h4>'
-                    f'{nature["captions"]}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+            st.subheader("🧠 生物学洞察（BioInsightSkill）")
+
+            bio = skill_outputs.get("bio_insight", {})
+            if bio:
+                col1, col2 = st.columns(2)
+                with col1:
+                    if bio.get("spatial_story"):
+                        st.markdown("**空间叙事：**")
+                        st.info(bio["spatial_story"])
+                    if bio.get("qc_interpretation"):
+                        with st.expander("QC 解读"):
+                            st.markdown(bio["qc_interpretation"])
+
+                with col2:
+                    if bio.get("cluster_names"):
+                        st.markdown("**Cluster 命名：**")
+                        names = bio["cluster_names"]
+                        if isinstance(names, dict):
+                            st.json(names)
+                        else:
+                            st.markdown(str(names))
+                    if bio.get("insights"):
+                        with st.expander("关键发现"):
+                            st.markdown(bio["insights"])
+
+                if bio.get("disclaimer"):
+                    st.caption(bio["disclaimer"])
+            else:
+                st.info("BioInsightSkill 未启用或未生成输出。")
+
+            # NaturePublish 快速预览
+            nature = skill_outputs.get("nature_publish", {})
+            if nature:
+                st.divider()
+                st.subheader("📄 NaturePublishSkill 预览")
+                if nature.get("methods"):
+                    st.markdown(
+                        f'<div class="step-card">'
+                        f'<h4>📝 Methods 段落</h4>'
+                        f'{nature["methods"]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                if nature.get("captions"):
+                    st.markdown(
+                        f'<div class="step-card">'
+                        f'<h4>🏷️ 图注（Figure Captions）</h4>'
+                        f'{nature["captions"]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
     elif not st.session_state.analysis_done:
         st.info("👆 输入分析需求后点击「开始分析」。")

@@ -411,6 +411,41 @@ def _find_latest_run_dir() -> str | None:
 
 
 # ══════════════════════════════════════════
+# 统一渲染函数
+# ══════════════════════════════════════════
+
+def render_agent_response(final_state: dict) -> bool:
+    """
+    统一渲染函数：QA / no_data 直接显示文字回答，analysis 返回 False。
+    返回 True 表示已处理（不再显示分析步骤）。
+    """
+    request_type = final_state.get("request_type", "")
+    messages = final_state.get("messages", [])
+    is_complete = final_state.get("is_complete", False)
+    analysis_plan = final_state.get("analysis_plan", [])
+
+    assistant_msgs = [m for m in messages if m.get("role") == "assistant"]
+    last_answer = assistant_msgs[-1].get("content", "") if assistant_msgs else ""
+
+    if request_type in ("qa", "no_data", "result_explanation") or (
+        is_complete and not analysis_plan
+    ):
+        st.divider()
+        if last_answer:
+            st.markdown("### 🤖 Agent 回答")
+            with st.container():
+                st.markdown(last_answer)
+        else:
+            st.warning(
+                final_state.get("error_message")
+                or "Agent 已完成，但没有生成可显示的回答。"
+            )
+        return True
+
+    return False
+
+
+# ══════════════════════════════════════════
 # 侧边栏
 # ══════════════════════════════════════════
 with st.sidebar:
@@ -603,15 +638,21 @@ with tab1:
     # ── 分析完成后：展示结果 ──
     if st.session_state.analysis_done and st.session_state.agent_state:
         agent_state = st.session_state.agent_state
-        completed = agent_state.get("completed_steps", [])
-        plan = agent_state.get("analysis_plan", [])
-        figures = agent_state.get("figures", {})
-        step_results = agent_state.get("step_results", {})
-        explanations = agent_state.get("explanations", {})
-        skill_outputs = agent_state.get("skill_outputs", {})
 
-        st.divider()
-        st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
+        # 先尝试统一渲染（QA / no_data 直接显示文字回答）
+        if render_agent_response(agent_state):
+            pass  # 已由 render_agent_response 处理
+        else:
+            # analysis 结果渲染
+            completed = agent_state.get("completed_steps", [])
+            plan = agent_state.get("analysis_plan", [])
+            figures = agent_state.get("figures", {})
+            step_results = agent_state.get("step_results", {})
+            explanations = agent_state.get("explanations", {})
+            skill_outputs = agent_state.get("skill_outputs", {})
+
+            st.divider()
+            st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
 
         # ── 中部：每步结果（卡片式布局） ──
         if plan:

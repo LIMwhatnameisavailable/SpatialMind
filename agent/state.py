@@ -13,6 +13,7 @@ class AgentState(TypedDict):
     # ── 用户输入 ──
     user_input: str               # 原始自然语言输入
     session_id: str               # 会话 ID，用于 SqliteSaver
+    request_type: str             # "qa" | "analysis" | "no_data" | "result_explanation" | "unknown"
 
     # ── 数据状态 ──
     data_path: str                # h5ad 文件路径
@@ -49,6 +50,7 @@ def get_initial_state(
     data_type: str = "unknown",
     step_params: Optional[dict[str, Any]] = None,
     session_id: Optional[str] = None,
+    output_dir: str = "outputs/figures",
 ) -> AgentState:
     """
     创建 AgentState 的初始化实例。
@@ -72,6 +74,8 @@ def get_initial_state(
     return {
         "user_input": user_input,
         "session_id": session_id,
+        "request_type": "unknown",
+        "output_dir": output_dir,
         "data_path": data_path,
         "data_type": data_type,
         "adata_cache_key": session_id,

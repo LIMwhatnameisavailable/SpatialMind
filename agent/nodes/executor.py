@@ -71,6 +71,10 @@ def executor_node(state: AgentState) -> dict:
 
     # 获取该步骤的参数
     params = step_params.get(next_step, {})
+    # 注入 output_dir（优先用 state.output_dir，某些步骤可能自定义覆盖）
+    global_output_dir = state.get("output_dir", "outputs/figures")
+    if "output_dir" not in params:
+        params = dict(params, output_dir=global_output_dir)
 
     # 执行工具
     try:

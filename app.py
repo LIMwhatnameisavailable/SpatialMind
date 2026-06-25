@@ -1,11 +1,12 @@
 """
 SpatialMind Streamlit 前端入口 — Phase 9.4
 
-页面结构（4 Tab）：
+页面结构（5 Tab）：
   Tab 1: 分析（主界面）— 侧边栏输入 + 对话 + 图表 + BioInsight
   Tab 2: 图表库           — 浏览 outputs/figures/ 下所有 PNG，按步骤分组
-  Tab 3: 报告             — NaturePublish Skill 输出（Methods / 图注 / 摘要）+ 复制按钮
-  Tab 4: 日志             — completed_steps / 错误 / 完整 state JSON
+  Tab 3: Agent 思考       — 节点执行路径 / Planner 推理 / 分析计划 / 步骤详情
+  Tab 4: 报告             — NaturePublish Skill 输出（Methods / 图注 / 摘要）+ 复制按钮
+  Tab 5: 日志             — completed_steps / 错误 / 完整 state JSON
 """
 
 import json
@@ -25,6 +26,98 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ── 自定义 CSS（深色科技风） ──
+st.markdown("""
+<style>
+/* 全局背景 */
+.stApp { background-color: #0f1117; }
+
+/* 侧边栏 */
+[data-testid="stSidebar"] { background-color: #1a1d2e; }
+[data-testid="stSidebar"] .stMarkdown { color: #c8d0e0; }
+
+/* 主内容卡片 */
+[data-testid="stVerticalBlock"] > div {
+    background-color: transparent;
+}
+
+/* Tab样式 */
+.stTabs [data-baseweb="tab-list"] {
+    background-color: #1e2130;
+    border-radius: 8px;
+    padding: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    color: #8892a4;
+    border-radius: 6px;
+}
+.stTabs [aria-selected="true"] {
+    background-color: #00d4aa22;
+    color: #00d4aa !important;
+    border-bottom: 2px solid #00d4aa;
+}
+
+/* 按钮 */
+.stButton > button {
+    background-color: #00d4aa;
+    color: #0f1117;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+.stButton > button:hover {
+    background-color: #00b894;
+    transform: translateY(-1px);
+}
+
+/* 输入框 */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea {
+    background-color: #1e2130;
+    color: #e0e6f0;
+    border: 1px solid #2d3250;
+    border-radius: 6px;
+}
+
+/* 成功/错误消息 */
+.stSuccess { border-left: 4px solid #00d4aa; background-color: #00d4aa11; }
+.stError { border-left: 4px solid #ff6b6b; background-color: #ff6b6b11; }
+.stInfo { border-left: 4px solid #4dabf7; background-color: #4dabf711; }
+.stWarning { border-left: 4px solid #ffd43b; background-color: #ffd43b11; }
+
+/* 进度条 */
+.stProgress > div > div > div { background-color: #00d4aa; }
+
+/* 通用文字 */
+.stMarkdown, p, span, label { color: #c8d0e0; }
+h1, h2, h3 { color: #e8edf5 !important; }
+
+/* 图片容器 */
+[data-testid="stImage"] {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #2d3250;
+}
+
+/* Expander */
+[data-testid="stExpander"] {
+    background-color: #1e2130;
+    border: 1px solid #2d3250;
+    border-radius: 8px;
+}
+
+/* 侧边栏卡片 & Step卡片（复用） */
+.step-card {
+    background-color: #1e2130 !important;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #2d3250;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ── 路径 ──
 PROJECT_ROOT = Path(__file__).parent
@@ -103,13 +196,20 @@ def discover_figures() -> dict[str, list[dict]]:
 # 侧边栏
 # ══════════════════════════════════════════
 with st.sidebar:
-    st.title("🧬 SpatialMind")
-    st.caption("空间转录组分析 Agent — Phase 9.4")
+    st.sidebar.markdown("""
+    <div style='text-align:center; padding: 16px 0 8px 0;'>
+        <div style='font-size:2em;'>🧬</div>
+        <div style='font-size:1.3em; font-weight:700; color:#00d4aa;'>SpatialMind</div>
+        <div style='font-size:0.75em; color:#8892a4; margin-top:4px;'>空间转录组智能分析平台</div>
+    </div>
+    <hr style='border-color:#2d3250; margin:8px 0;'>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
     # ── 数据输入 ──
-    st.subheader("📁 数据")
+    st.markdown('<p class="sidebar-section-header">📁 数据输入</p>', unsafe_allow_html=True)
+
     data_path = st.text_input(
         "数据路径（.h5ad）",
         placeholder="data/data/anndata/visium_hne_adata.h5ad",
@@ -153,7 +253,8 @@ with st.sidebar:
     st.divider()
 
     # ── 分析参数 ──
-    st.subheader("⚙️ 参数")
+    st.markdown('<p class="sidebar-section-header">⚙️ 分析参数</p>', unsafe_allow_html=True)
+
     clustering_resolution = st.slider(
         "聚类分辨率", 0.1, 2.0, 0.5, 0.1
     )
@@ -162,10 +263,10 @@ with st.sidebar:
 
     st.divider()
 
-    # ── Skills 开关 ──
-    st.subheader("🎯 Skills")
-    enable_nature_publish = st.checkbox("NaturePublishSkill", value=True)
-    enable_bio_insight = st.checkbox("BioInsightSkill", value=True)
+    # ── Skills 设置 ──
+    st.sidebar.markdown("### 🎨 Skills 设置")
+    enable_nature_publish = st.sidebar.toggle("🎨 NaturePublish 模式", value=True, key="toggle_nature")
+    enable_bio_insight = st.sidebar.toggle("🧠 BioInsight 洞察", value=True, key="toggle_bio")
 
     st.divider()
     st.caption(f"会话 `{st.session_state.session_id[:8]}...`")
@@ -176,11 +277,12 @@ with st.sidebar:
 
 
 # ══════════════════════════════════════════
-# 主区域 — 4 个 Tab
+# 主区域 — 5 个 Tab
 # ══════════════════════════════════════════
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🔬 分析（主界面）",
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🔬 分析",
     "🖼️ 图表库",
+    "🧠 Agent思考",
     "📄 报告",
     "📋 日志",
 ])
@@ -235,6 +337,8 @@ with tab1:
             "cluster": {"resolution": clustering_resolution},
             "dimred": {"n_pcs": n_pcs, "n_neighbors": 15},
             "preprocess": {"n_top_genes": n_top_genes},
+            "enable_nature_publish": enable_nature_publish,
+            "enable_bio_insight": enable_bio_insight,
         }
         initial_state = get_initial_state(
             user_input=prompt,
@@ -276,39 +380,66 @@ with tab1:
         st.divider()
         st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
 
-        # ── 中部：每步结果（使用内部 tabs 分步展示） ──
+        # ── 中部：每步结果（卡片式布局） ──
         if plan:
-            step_labels = [s.upper() for s in plan]
-            step_tabs = st.tabs(step_labels)
-
             for idx, step in enumerate(plan):
-                with step_tabs[idx]:
-                    col_fig, col_exp = st.columns([3, 2])
+                st.markdown(f'<div class="step-card">', unsafe_allow_html=True)
 
-                    with col_fig:
-                        st.subheader(f"📊 {step.upper()}")
+                st.subheader(f"📊 Step {idx+1}: {step.upper()}")
 
-                        # 显示图片
-                        if step in figures:
-                            fig_path = figures[step]
-                            if os.path.exists(fig_path):
-                                st.image(fig_path, caption=f"{step.upper()} 图", use_container_width=True)
+                # 2 列布局：最多显示 2 张图
+                if step in figures:
+                    fig_path = figures[step]
+                    if os.path.exists(fig_path):
+                        # 尝试从 step_results 获取更多图片
+                        extra_figs = step_results.get(step, {}).get("figure_paths", [])
+                        extra_figs = [f for f in extra_figs if f != fig_path and os.path.exists(f)]
+
+                        cols = st.columns(2)
+                        with cols[0]:
+                            st.image(fig_path, caption=f"{step.upper()} — 主图", use_container_width=True)
+
+                        with cols[1]:
+                            if extra_figs:
+                                st.image(extra_figs[0], caption=f"{step.upper()} — 辅助图", use_container_width=True)
                             else:
-                                st.warning(f"图表文件不存在: {fig_path}")
-
-                        # 显示关键指标
-                        if step in step_results:
-                            metrics = step_results[step].get("metrics", {})
-                            if metrics:
+                                # 第二列展示关键指标
+                                metrics = step_results.get(step, {}).get("metrics", {})
+                                if metrics:
+                                    st.markdown("**📈 关键指标**")
+                                    for k, v in metrics.items():
+                                        if isinstance(v, (int, float)):
+                                            st.metric(label=k.replace("_", " ").title(), value=f"{v:.4f}" if isinstance(v, float) else str(v))
+                                        elif isinstance(v, str):
+                                            st.markdown(f"- **{k}:** {v}")
+                                        else:
+                                            st.markdown(f"- **{k}:** {v}")
+                                    st.markdown("")  # spacing
+                            # 额外指标 expander
+                            metrics = step_results.get(step, {}).get("metrics", {})
+                            if metrics and not extra_figs:
+                                pass  # already shown above
+                            elif metrics:
                                 with st.expander("📈 关键指标", expanded=False):
                                     st.json(metrics)
+                    else:
+                        st.warning(f"图表文件不存在: {fig_path}")
+                else:
+                    # 没有图片时，全宽展示指标
+                    metrics = step_results.get(step, {}).get("metrics", {})
+                    if metrics:
+                        st.markdown("**📈 关键指标**")
+                        st.json(metrics)
 
-                    with col_exp:
-                        st.subheader("📝 解释")
-                        if step in explanations:
-                            st.markdown(explanations[step])
-                        else:
-                            st.info("暂无解释。")
+                # 解释文字 — 始终在图片下方
+                if step in explanations:
+                    st.markdown("---")
+                    st.markdown(f"**📝 生物学解释**")
+                    st.markdown(explanations[step])
+                else:
+                    st.info("暂无解释。")
+
+                st.markdown('</div>', unsafe_allow_html=True)
 
         # ── 下方：BioInsight 输出 ──
         st.divider()
@@ -348,11 +479,21 @@ with tab1:
             st.divider()
             st.subheader("📄 NaturePublishSkill 预览")
             if nature.get("methods"):
-                with st.expander("Methods 段落"):
-                    st.markdown(nature["methods"])
+                st.markdown(
+                    f'<div class="step-card">'
+                    f'<h4>📝 Methods 段落</h4>'
+                    f'{nature["methods"]}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
             if nature.get("captions"):
-                with st.expander("图注"):
-                    st.markdown(nature["captions"])
+                st.markdown(
+                    f'<div class="step-card">'
+                    f'<h4>🏷️ 图注（Figure Captions）</h4>'
+                    f'{nature["captions"]}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
     elif not st.session_state.analysis_done:
         st.info("👆 输入分析需求后点击「开始分析」。")
@@ -410,9 +551,105 @@ with tab2:
 
 
 # ══════════════════════════════════════════
-# Tab 3 · 报告
+# Tab 3 · Agent 思考
 # ══════════════════════════════════════════
 with tab3:
+    st.header("🧠 Agent 思考")
+    st.caption("LangGraph 节点执行路径与 Planner 推理过程的可视化。")
+
+    last_state = st.session_state.get("agent_state", None)
+
+    if last_state is None:
+        st.info("请先在「🔬 分析」Tab 运行分析")
+    else:
+        # ── 节点执行路径 ──
+        st.subheader("🔄 节点执行路径")
+        NODE_SEQUENCE = ["intent_parser", "planner", "executor", "checker", "explainer", "skill_invoker"]
+        completed_steps = last_state.get("completed_steps", [])
+        is_complete = last_state.get("is_complete", False)
+
+        nodes_display = []
+        for node in NODE_SEQUENCE:
+            if is_complete or node in completed_steps:
+                icon = "✅"
+            elif node == "executor" and completed_steps:
+                # 如果至少有一节点完成但 executor 不在其中，说明它在执行
+                icon = "🔄"
+            else:
+                icon = "⭕"
+            label = node.replace("_", " ").title()
+            nodes_display.append(f"{icon} {label}")
+
+        # 横向排列
+        col_headers = st.columns(len(NODE_SEQUENCE))
+        for i, (col, display) in enumerate(zip(col_headers, nodes_display)):
+            with col:
+                st.markdown(
+                    f"<div style='text-align:center; padding:8px 4px; "
+                    f"background:#1e2130; border-radius:6px; border:1px solid #2d3250;'>"
+                    f"<span style='font-size:1.1rem;'>{display}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+        # 箭头连接（在节点下方）
+        arrow_cols = st.columns(len(NODE_SEQUENCE) * 2 - 1)
+        for i in range(len(NODE_SEQUENCE) - 1):
+            arrow_cols[i * 2 + 1].markdown(
+                "<div style='text-align:center; color:#00d4aa; font-size:1.5rem;'>→</div>",
+                unsafe_allow_html=True,
+            )
+
+        st.divider()
+
+        # ── Planner 思考过程 ──
+        st.subheader("🧠 Planner 推理过程")
+        thinking = last_state.get("step_results", {}).get("planner_thinking", "")
+        with st.expander("查看 Planner 推理过程", expanded=False):
+            if thinking:
+                st.markdown(thinking)
+            else:
+                st.info("暂无思考记录，请先运行分析")
+
+        st.divider()
+
+        # ── 分析计划 ──
+        st.subheader("📋 分析计划")
+        analysis_plan = last_state.get("analysis_plan", [])
+        if analysis_plan:
+            for idx, step in enumerate(analysis_plan):
+                if step in completed_steps:
+                    icon = "✅"
+                elif step == last_state.get("current_step", ""):
+                    icon = "🔄"
+                else:
+                    icon = "⭕"
+                st.markdown(f"{icon} **{idx+1}. {step}**")
+        else:
+            st.info("暂无分析计划")
+
+        st.divider()
+
+        # ── 步骤详情 ──
+        st.subheader("📌 步骤详情")
+        step_results = last_state.get("step_results", {})
+        explanations = last_state.get("explanations", {})
+        if completed_steps:
+            for step in completed_steps:
+                with st.expander(f"✅ {step.upper()} 详情", expanded=False):
+                    if step in step_results:
+                        summary = step_results[step].get("summary", "")
+                        if summary:
+                            st.markdown(f"**摘要：** {summary}")
+                    if step in explanations:
+                        st.markdown(f"**解释：** {explanations[step]}")
+        else:
+            st.info("暂无已完成的步骤")
+
+
+# ══════════════════════════════════════════
+# Tab 4 · 报告
+# ══════════════════════════════════════════
+with tab4:
     st.header("📄 分析报告")
     st.caption("NaturePublishSkill 输出的发表级报告内容（AI 生成，仅供参考）。")
 
@@ -483,11 +720,47 @@ with tab3:
                     if os.path.exists(p):
                         st.image(p, caption=Path(p).name, use_container_width=True)
 
+            # ── 下载区域 ──
+            st.markdown("---")
+            st.subheader("📥 导出报告")
+
+            col_dl1, col_dl2 = st.columns(2)
+
+            with col_dl1:
+                html_path = nature.get("html_report", "")
+                if html_path and os.path.exists(html_path):
+                    with open(html_path, "r", encoding="utf-8") as f:
+                        html_content = f.read()
+                    st.download_button(
+                        label="📥 下载 HTML 报告",
+                        data=html_content,
+                        file_name="SpatialMind_Report.html",
+                        mime="text/html",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("请先完成分析并启用 NaturePublish 模式")
+
+            with col_dl2:
+                docx_path = nature.get("docx_path", "")
+                if docx_path and os.path.exists(docx_path):
+                    with open(docx_path, "rb") as f:
+                        docx_content = f.read()
+                    st.download_button(
+                        label="📥 下载 Word 文档",
+                        data=docx_content,
+                        file_name="SpatialMind_Report.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("请先完成分析并启用 NaturePublish 模式")
+
 
 # ══════════════════════════════════════════
-# Tab 4 · 日志
+# Tab 5 · 日志
 # ══════════════════════════════════════════
-with tab4:
+with tab5:
     st.header("📋 执行日志")
     st.caption("Agent 执行过程的完整日志，用于调试和审计。")
 

@@ -41,14 +41,16 @@ def generate_html_report(state: AgentState) -> str:
     sections_html = ""
 
     for step in ["qc", "preprocess", "dimred", "cluster", "spatial", "marker"]:
-        if step in step_results:
-            result = step_results[step]
-            img_html = ""
-            if step in figures and os.path.exists(figures[step]):
-                img_b64 = _img_to_base64(figures[step])
-                img_html = f'<img src="{img_b64}" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:5px;" />'
+        if step not in step_results:
+            continue
+        result = step_results[step]
 
-            sections_html += f"""
+        img_html = ""  # 默认空字符串
+        if step in figures and os.path.exists(figures[step]):
+            img_b64 = _img_to_base64(figures[step])
+            img_html = f'<img src="{img_b64}" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:5px;" />'
+
+        sections_html += f"""
             <div class="section">
                 <h2>{step.upper()}</h2>
                 <p><strong>摘要:</strong> {result.get('summary', '')}</p>

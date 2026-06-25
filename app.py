@@ -565,7 +565,7 @@ with tab1:
 
     col_run, col_status = st.columns([1, 3])
     with col_run:
-        run_clicked = st.button("🚀 开始分析", type="primary", use_container_width=True)
+        run_clicked = st.button("🚀 发送给 Agent", type="primary", use_container_width=True)
     with col_status:
         if st.session_state.data_loaded:
             info = st.session_state.data_info
@@ -653,7 +653,6 @@ with tab1:
 
             st.divider()
             st.success(f"✅ 分析完成！共完成 {len(completed)} 个步骤: {', '.join(completed)}")
-
         # ── 中部：每步结果（卡片式布局） ──
         if plan:
             for idx, step in enumerate(plan):
@@ -661,7 +660,7 @@ with tab1:
 
                 st.subheader(f"📊 Step {idx+1}: {step.upper()}")
 
-                # 全宽展示该步骤的所有独立图
+# 全宽展示该步骤的所有独立图
                 if step in step_results:
                     all_figs = step_results[step].get("figure_paths", [])
                     all_figs = [f for f in all_figs if os.path.exists(f)]
@@ -1089,8 +1088,7 @@ with tab4:
                 else:
                     st.info("请先完成分析并启用 NaturePublish 模式")
 
-
-# ══════════════════════════════════════════
+            # ══════════════════════════════════════════
 # Tab 5 · 日志
 # ══════════════════════════════════════════
 with tab5:
